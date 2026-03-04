@@ -1,0 +1,8 @@
+# USB Recovery Tool
+# 이 프로그램은 Python 표준 라이브러리만 사용합니다.
+# 추가 패키지 설치가 필요하지 않습니다.
+#
+# 시스템 요구사항 (선택사항, Linux):
+#   sudo apt install dosfstools    # FAT 파일시스템 복구
+#   sudo apt install ntfs-3g       # NTFS 파일시스템 복구
+#   sudo apt install e2fsprogs     # ext 파일시스템 복구
