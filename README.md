@@ -15,7 +15,7 @@
 | 카테고리 | 형식 |
 |---------|------|
 | 이미지 | JPG, PNG, GIF, BMP, ICO, WebP, TIFF |
-| 문서 | PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX |
+| 문서 | PDF, DOC/DOCX, XLS/XLSX, PPT/PPTX, HWP/HWPX (한글), ODT |
 | 오디오 | MP3, FLAC, OGG |
 | 비디오 | MP4, MKV/WebM |
 | 압축 | ZIP, RAR, 7Z, GZ, XZ, BZ2 |

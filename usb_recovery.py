@@ -38,8 +38,9 @@ FILE_SIGNATURES = {
 
     # 문서 파일
     b'%PDF': {'ext': '.pdf', 'name': 'PDF Document', 'footer': b'%%EOF'},
-    b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1': {'ext': '.doc', 'name': 'MS Office Document (OLE)', 'footer': None},
-    b'PK\x03\x04': {'ext': '.zip', 'name': 'ZIP/DOCX/XLSX/PPTX Archive', 'footer': b'PK\x05\x06'},
+    b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1': {'ext': '.doc', 'name': 'MS Office/HWP Document (OLE)', 'footer': None, 'ole': True},
+    b'PK\x03\x04': {'ext': '.zip', 'name': 'ZIP/Office Archive', 'footer': b'PK\x05\x06', 'zip': True},
+    b'HWP Document File': {'ext': '.hwp', 'name': 'HWP Document (한글)', 'footer': None},
 
     # 오디오/비디오 파일
     b'\x49\x44\x33': {'ext': '.mp3', 'name': 'MP3 Audio (ID3)', 'footer': None},
@@ -83,6 +84,12 @@ DEFAULT_MAX_FILE_SIZE = {
     '.bmp': 100 * 1024 * 1024,    # 100MB
     '.pdf': 200 * 1024 * 1024,    # 200MB
     '.doc': 100 * 1024 * 1024,    # 100MB
+    '.docx': 100 * 1024 * 1024,   # 100MB
+    '.xlsx': 100 * 1024 * 1024,   # 100MB
+    '.pptx': 200 * 1024 * 1024,   # 200MB
+    '.hwp': 100 * 1024 * 1024,    # 100MB
+    '.hwpx': 100 * 1024 * 1024,   # 100MB
+    '.odt': 100 * 1024 * 1024,    # 100MB
     '.zip': 500 * 1024 * 1024,    # 500MB
     '.mp3': 50 * 1024 * 1024,     # 50MB
     '.mp4': 2 * 1024 * 1024 * 1024,  # 2GB
@@ -92,6 +99,49 @@ DEFAULT_MAX_FILE_SIZE = {
     '.7z': 500 * 1024 * 1024,     # 500MB
 }
 DEFAULT_FALLBACK_SIZE = 10 * 1024 * 1024  # 10MB
+
+# OLE 내부 스트림 이름으로 파일 형식 구분 (구 형식: .doc, .xls, .ppt, .hwp)
+OLE_STREAM_SIGNATURES = {
+    b'HWP Document File': ('.hwp', 'HWP Document (한글)'),
+    b'W\x00o\x00r\x00d\x00D\x00o\x00c\x00u\x00m\x00e\x00n\x00t': ('.doc', 'MS Word Document'),
+    b'W\x00o\x00r\x00k\x00b\x00o\x00o\x00k': ('.xls', 'MS Excel Spreadsheet'),
+    b'P\x00o\x00w\x00e\x00r\x00P\x00o\x00i\x00n\x00t': ('.ppt', 'MS PowerPoint Presentation'),
+    b'\x00Hancom': ('.hwp', 'HWP Document (한글)'),
+}
+
+# ZIP 내부 파일명으로 OOXML/HWPX 구분
+ZIP_CONTENT_SIGNATURES = {
+    b'word/': ('.docx', 'MS Word Document (DOCX)'),
+    b'xl/': ('.xlsx', 'MS Excel Spreadsheet (XLSX)'),
+    b'ppt/': ('.pptx', 'MS PowerPoint Presentation (PPTX)'),
+    b'Contents/': ('.hwpx', 'HWP Document (한글 HWPX)'),
+    b'mimetype': ('.odt', 'OpenDocument'),  # ODT/ODS/ODP
+}
+
+
+def identify_ole_type(file_data):
+    """OLE 복합 문서의 실제 파일 형식 감지 (HWP, DOC, XLS, PPT)"""
+    for stream_sig, (ext, name) in OLE_STREAM_SIGNATURES.items():
+        if stream_sig in file_data[:8192]:
+            return ext, name
+    return '.doc', 'MS Office Document (OLE)'
+
+
+def identify_zip_type(file_data):
+    """ZIP 기반 파일의 실제 형식 감지 (DOCX, XLSX, PPTX, HWPX)"""
+    # ZIP 내부 파일 목록에서 특징적인 경로를 찾아 형식 구분
+    search_region = file_data[:4096]
+    for content_sig, (ext, name) in ZIP_CONTENT_SIGNATURES.items():
+        if content_sig in search_region:
+            # ODT인 경우 mimetype 내용으로 세분화
+            if ext == '.odt' and b'opendocument.text' in search_region:
+                return '.odt', 'OpenDocument Text (ODT)'
+            elif ext == '.odt' and b'opendocument.spreadsheet' in search_region:
+                return '.ods', 'OpenDocument Spreadsheet (ODS)'
+            elif ext == '.odt' and b'opendocument.presentation' in search_region:
+                return '.odp', 'OpenDocument Presentation (ODP)'
+            return ext, name
+    return '.zip', 'ZIP Archive'
 
 
 def format_size(size_bytes):
@@ -413,6 +463,19 @@ class USBRecoveryTool:
                     if len(file_data) < 64:
                         continue
 
+                    # OLE 복합 문서 세부 형식 감지 (HWP, DOC, XLS, PPT)
+                    file_name = info['name']
+                    if info.get('ole'):
+                        ext, file_name = identify_ole_type(file_data)
+                        type_dir = os.path.join(self.output_dir, ext.lstrip('.').upper())
+                        os.makedirs(type_dir, exist_ok=True)
+
+                    # ZIP 기반 문서 세부 형식 감지 (DOCX, XLSX, PPTX, HWPX)
+                    if info.get('zip'):
+                        ext, file_name = identify_zip_type(file_data)
+                        type_dir = os.path.join(self.output_dir, ext.lstrip('.').upper())
+                        os.makedirs(type_dir, exist_ok=True)
+
                     # 중복 파일 확인 (해시 기반)
                     file_hash = hashlib.md5(file_data).hexdigest()
                     if file_hash in seen_hashes:
@@ -429,13 +492,13 @@ class USBRecoveryTool:
                     file_count += 1
                     self.recovered_files.append({
                         'path': filepath,
-                        'type': info['name'],
+                        'type': file_name,
                         'size': len(file_data),
                         'offset': offset,
                         'hash': file_hash
                     })
 
-                    print(f"    [{file_count}] {info['name']}: {filename} "
+                    print(f"    [{file_count}] {file_name}: {filename} "
                           f"({format_size(len(file_data))})")
 
         except Exception as e:
